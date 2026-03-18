@@ -7511,8 +7511,7 @@ public final class Bindings {
             @Override
             protected V computeValue() {
                 final Object currentKey = key.getValue();
-                final V val = getMapValue(op, currentKey);
-                return val;
+                return getMapValue(op, currentKey);
             }
 
             @Override
