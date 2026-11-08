@@ -164,6 +164,19 @@ final public class StyleManager {
     // public for testing
     public static final Map<Parent, CacheContainer> cacheContainerMap = new WeakHashMap<>();
 
+    // Source of the generation values of the cache containers
+    private static long cacheGenerationCounter;
+
+    /**
+     * Returns a value that changes whenever the style cache used for the given styleable
+     * is cleared or replaced. Style information obtained from the cache before
+     * is only valid as long as this value stays the same.
+     */
+    public long getCacheGeneration(Styleable styleable, SubScene subScene) {
+        CacheContainer container = getCacheContainer(styleable, subScene);
+        return container != null ? container.generation : 0;
+    }
+
     // package for testing
     CacheContainer getCacheContainer(Styleable styleable, SubScene subScene) {
 
@@ -1827,6 +1840,8 @@ final public class StyleManager {
     // package for testing
     static class CacheContainer {
 
+        private long generation = ++cacheGenerationCounter;
+
         private Map<StyleCache.Key,StyleCache> getStyleCache() {
             if (styleCache == null) styleCache = new HashMap<>();
             return styleCache;
@@ -1906,6 +1921,8 @@ final public class StyleManager {
         }
 
         private void clearCache() {
+
+            generation = ++cacheGenerationCounter;
 
             if (cacheMap != null) cacheMap.clear();
             if (styleCache != null) styleCache.clear();

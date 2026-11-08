@@ -107,6 +107,7 @@ import javafx.scene.transform.Transform;
 import javafx.stage.Window;
 import javafx.util.Callback;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -127,6 +128,7 @@ import com.sun.javafx.beans.event.AbstractNotifyListener;
 import com.sun.javafx.collections.TrackableObservableList;
 import com.sun.javafx.collections.UnmodifiableListSet;
 import com.sun.javafx.css.PseudoClassState;
+import com.sun.javafx.css.StyleManager;
 import com.sun.javafx.css.TransitionDefinition;
 import com.sun.javafx.css.TransitionDefinitionConverter;
 import com.sun.javafx.css.TransitionDefinitionCssMetaData;
@@ -623,6 +625,7 @@ public abstract sealed class Node
 
             @Override
             public void scheduleReapplyCSS(Node node) {
+                node.styleKeyChanged = true;
                 node.cssFlag = CssFlags.REAPPLY;
                 Toolkit.getToolkit().requestNextPulse();
             }
@@ -1075,7 +1078,7 @@ public abstract sealed class Node
                         // to be done from Parent.children's onChanged method.
                         // See the comments there, also.
                         //
-                        reapplyCSS();
+                        reapplyCSS(false);
                     } else {
                         // JDK-8123224: reset CssFlag to clean so css will be reapplied if the node is added back later.
                         // If flag is REAPPLY, then reapplyCSS() will just return and the call to
@@ -1173,7 +1176,13 @@ public abstract sealed class Node
         }
         scenesChanged(newScene, newSubScene, oldScene, oldSubScene);
 
-        if (sceneChanged) reapplyCSS();
+        if (sceneChanged) {
+            if (canKeepStylesOnReattach(newScene, newSubScene)) {
+                keepStylesAndUpdateState();
+            } else {
+                reapplyCSS(false);
+            }
+        }
 
         if (sceneChanged && !isDirtyEmpty()) {
             //Note: no need to remove from scene's dirty list
@@ -9811,6 +9820,77 @@ public abstract sealed class Node
      */
     CssFlags cssFlag = CssFlags.CLEAN;
 
+    /*
+     * Nodes within a subtree whose root has this property set to Boolean.TRUE keep their matched styles
+     * when they are removed from a scene and added to the same scene again. Matching the styles again is
+     * expensive, so in that case only the CSS state is updated. The styles are still matched again if
+     * the style classes, id, inline style, or stylesheets of the node itself changed in the meantime,
+     * or if the stylesheets of the scene changed.
+     *
+     * The application has to ensure that nodes in such a subtree are added to the same parent again,
+     * and that the style classes, ids, inline styles, and stylesheets of their ancestors do not change
+     * while they are removed.
+     */
+    private static final String KEEP_STYLES_ON_REATTACH_PROPERTY = "javafx.css.keepStylesOnReattach";
+
+    // The scene in which the styles were last matched, only recorded if keeping styles is enabled
+    private WeakReference<Scene> styleMatchScene;
+    private long styleMatchCacheGeneration;
+    // Set when a property affecting the matched styles of this node changes, cleared when the styles are matched
+    private boolean styleKeyChanged;
+
+    private boolean isKeepStylesOnReattachEnabled() {
+        for (Node n = this; n != null; n = n.getParent()) {
+            if (n.hasProperties() && Boolean.TRUE.equals(n.getProperties().get(KEEP_STYLES_ON_REATTACH_PROPERTY))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void recordStyleMatch() {
+        styleKeyChanged = false;
+        var scene = getScene();
+        if (scene == null || !isKeepStylesOnReattachEnabled()) {
+            styleMatchScene = null;
+            return;
+        }
+
+        if (styleMatchScene == null || styleMatchScene.get() != scene) {
+            styleMatchScene = new WeakReference<>(scene);
+        }
+        styleMatchCacheGeneration = StyleManager.getInstance().getCacheGeneration(this, getSubScene());
+    }
+
+    private boolean canKeepStylesOnReattach(Scene newScene, SubScene newSubScene) {
+        if (newScene == null || styleMatchScene == null || styleMatchScene.get() != newScene) {
+            return false;
+        }
+
+        if (styleKeyChanged || cssFlag == CssFlags.REAPPLY) {
+            return false;
+        }
+
+        if (styleMatchCacheGeneration != StyleManager.getInstance().getCacheGeneration(this, newSubScene)) {
+            return false;
+        }
+
+        return isKeepStylesOnReattachEnabled();
+    }
+
+    private void keepStylesAndUpdateState() {
+        if (cssFlag == CssFlags.CLEAN || cssFlag == CssFlags.DIRTY_BRANCH) {
+            cssFlag = CssFlags.UPDATE;
+        }
+
+        // Same as in reapplyCSS, apply the styles immediately if added during layout
+        if (getParent() != null && getParent().isPerformingLayout()) {
+            NodeHelper.processCSS(this);
+        } else {
+            notifyParentsOfInvalidatedCSS();
+        }
+    }
+
     /**
      * Needed for testing.
      */
@@ -9926,6 +10006,17 @@ public abstract sealed class Node
     }
 
     final void reapplyCSS() {
+        reapplyCSS(true);
+    }
+
+    /*
+     * The style key is not changed when this is called because the node was added or removed.
+     */
+    private void reapplyCSS(boolean styleKeyChanged) {
+        if (styleKeyChanged) {
+            this.styleKeyChanged = true;
+        }
+
         var scene = getScene();
         if (scene == null) return;
 
@@ -9987,6 +10078,7 @@ public abstract sealed class Node
         cssFlag = CssFlags.REAPPLY;
 
         styleHelper = CssStyleHelper.createStyleHelper(this);
+        recordStyleMatch();
 
         // REAPPLY to my children, too.
         if (this instanceof Parent) {

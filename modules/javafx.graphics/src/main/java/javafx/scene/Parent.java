@@ -1414,6 +1414,9 @@ public abstract non-sealed class Parent extends Node {
                         }
 
                         reapplyCSS();
+                    } else {
+                        // Not in a scene, but this records that the styles of this parent have to be matched again
+                        reapplyCSS();
                     }
                 }
             };
