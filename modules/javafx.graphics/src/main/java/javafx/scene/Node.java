@@ -814,6 +814,11 @@ public abstract sealed class Node
                                      || isDirty(DirtyBits.NODE_VISIBLE)
                                      || isDirty(DirtyBits.NODE_FORCE_SYNC)))
         {
+            // Invisible nodes might not have been visited by updateBounds() as their parent skipped them.
+            // The bounds dirty bits are cleared below, so they have to be saved for when this node becomes visible.
+            if (!treeVisible && isBoundsDirty()) {
+                pendingUpdateBounds = true;
+            }
             NodeHelper.updatePeer(this);
             clearDirty();
         }
@@ -834,6 +839,16 @@ public abstract sealed class Node
 
     private boolean pendingUpdateBounds = false;
 
+    final boolean isBoundsUpdateSkipped() {
+        return !treeVisible && !isDirty(DirtyBits.NODE_VISIBLE);
+    }
+
+    private boolean isBoundsDirty() {
+        return isDirty(DirtyBits.NODE_TRANSFORM)
+                || isDirty(DirtyBits.NODE_TRANSFORMED_BOUNDS)
+                || isDirty(DirtyBits.NODE_BOUNDS);
+    }
+
     // Happens before we hold the sync lock
     void updateBounds() {
         // Note: the clip must be handled before the visibility is checked. This is because the visiblity might be
@@ -844,13 +859,11 @@ public abstract sealed class Node
         }
 
         // See syncPeer()
-        if (!treeVisible && !isDirty(DirtyBits.NODE_VISIBLE)) {
+        if (isBoundsUpdateSkipped()) {
 
             // Need to save the dirty bits since they will be cleared even for the
             // case of short circuiting dirty bit processing.
-            if (isDirty(DirtyBits.NODE_TRANSFORM)
-                    || isDirty(DirtyBits.NODE_TRANSFORMED_BOUNDS)
-                    || isDirty(DirtyBits.NODE_BOUNDS)) {
+            if (isBoundsDirty()) {
                 pendingUpdateBounds = true;
             }
 

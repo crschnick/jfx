@@ -1942,8 +1942,12 @@ public abstract non-sealed class Parent extends Node {
      * Updates the bounds of this {@code Parent} and its children.
      */
     @Override protected void updateBounds() {
-        for (int i=0, max=children.size(); i<max; i++) {
-            children.get(i).updateBounds();
+        // The children of an invisible parent are invisible as well and would skip the update anyway.
+        // Their pending bounds changes are kept until they become visible, see Node.syncPeer().
+        if (!isBoundsUpdateSkipped()) {
+            for (int i=0, max=children.size(); i<max; i++) {
+                children.get(i).updateBounds();
+            }
         }
         super.updateBounds();
     }
