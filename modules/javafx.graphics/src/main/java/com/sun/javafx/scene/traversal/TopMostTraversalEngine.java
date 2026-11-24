@@ -115,7 +115,9 @@ public abstract class TopMostTraversalEngine extends TraversalEngine{
             newNode.requestFocus();
         }
 
-        notifyTreeTraversedTo(newNode);
+        if (method != TraversalMethod.FOCUS_RECOVERY) {
+            notifyTreeTraversedTo(newNode);
+        }
     }
 
     private void notifyTreeTraversedTo(Node newNode) {

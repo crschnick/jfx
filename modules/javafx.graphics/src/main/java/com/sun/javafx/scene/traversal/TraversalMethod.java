@@ -37,5 +37,12 @@ public enum TraversalMethod {
     /**
      * Traversal was initiated by pressing a key on the keyboard.
      */
-    KEY
+    KEY,
+
+    /**
+     * Traversal was initiated because the current focus owner is no longer eligible
+     * to have the focus, e.g. because it has become disabled or invisible.
+     * Traverse listeners are not notified, so that e.g. scroll panes don't scroll to the new focus owner.
+     */
+    FOCUS_RECOVERY
 }

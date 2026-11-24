@@ -2257,7 +2257,7 @@ public class Scene implements EventTarget {
      * function assumes that it is still a member of the same scene.
      */
     private void focusIneligible(Node node) {
-        traverse(node, Direction.NEXT, TraversalMethod.DEFAULT);
+        traverse(node, Direction.NEXT, TraversalMethod.FOCUS_RECOVERY);
     }
 
     boolean processKeyEvent(KeyEvent e) {
